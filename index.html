@@ -25,7 +25,7 @@
       ga4Id: 'G-SCORNELL26',
       adsId: 'AW-18529708904',
       adsLabel: 'hd3PCOSHu7wdEOjW04NF',
-      webhookUrl: ''
+      webhookUrl: 'https://script.google.com/a/macros/power7realty.com/s/AKfycbzeAyiO6ztxh2Q9wvlFweNAq7VIJTzTS6Hog49s3mD6KXr4bltm3SDToW4IJv8Ha2LU8g/exec'
     };
     window.pushConversionEvent = function(eventName, eventParams) {
       const payload = Object.assign({
@@ -944,7 +944,8 @@
 
       // 4. Leads Storage & Tracking
       let capturedLeads = safeGetStorage('sc_vip_leads', []);
-      const savedWebhook = safeGetStorage('sc_webhook_url', '');
+      const defaultWebhook = window.vcTrackingConfig.webhookUrl || '';
+      const savedWebhook = safeGetStorage('sc_webhook_url', defaultWebhook) || defaultWebhook;
       const inputWebhookEl = document.getElementById('input-webhook-url');
       if (inputWebhookEl && savedWebhook) {
         inputWebhookEl.value = savedWebhook;
