@@ -624,6 +624,17 @@
               <button type="button" id="test-webhook-btn" class="px-3.5 py-2 rounded bg-emerald-700 hover:bg-emerald-600 text-white font-semibold transition">
                 Send Test Lead
               </button>
+              <button type="button" id="toggle-sc-script-btn" class="px-3.5 py-2 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold transition">
+                View Apps Script Code
+              </button>
+            </div>
+            <div id="webhook-status-msg" class="hidden p-2.5 rounded bg-slate-900 border border-slate-700 text-[11px] text-emerald-300"></div>
+            <div id="sc-script-box" class="hidden p-3 rounded bg-slate-900 border border-slate-700 space-y-2">
+              <div class="flex items-center justify-between text-[11px] text-slate-300">
+                <span>Paste into Google Sheet &rarr; Extensions &rarr; Apps Script (Deploy as Web App, Access: Anyone):</span>
+                <button type="button" id="copy-sc-script-btn" class="text-[#f3c669] font-bold hover:underline">Copy</button>
+              </div>
+              <pre id="sc-script-pre" class="overflow-x-auto p-2 rounded bg-black/60 text-[10px] text-emerald-300 max-h-44 font-mono"></pre>
             </div>
           </div>
 
@@ -1021,7 +1032,8 @@
             fetch(webhookUrl, {
               method: 'POST',
               mode: 'no-cors',
-              headers: { 'Content-Type': 'application/json' },
+              redirect: 'follow',
+              headers: { 'Content-Type': 'text/plain;charset=utf-8' },
               body: JSON.stringify(lead)
             }).catch(function() {});
           } catch (err) {}
@@ -1100,32 +1112,118 @@
         });
       }
 
+      const scAppsScriptCode = `function doPost(e) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getActiveSheet();
+    var raw = (e && e.postData && e.postData.contents) ? e.postData.contents : "{}";
+    var data = JSON.parse(raw);
+
+    sheet.appendRow([
+      data.timestamp || Utilities.formatDate(new Date(), "America/Toronto", "yyyy-MM-dd HH:mm:ss"),
+      data.name || "",
+      data.phone || "",
+      data.email || "",
+      data.interest || "Lowest Price Units (From $799,900)",
+      data.is_agent || "No",
+      data.call_window || "Yes - Call Me ASAP",
+      data.source || "South Cornell Landing Page",
+      "New"
+    ]);
+
+    MailApp.sendEmail(
+      "eric.wy.hui@outlook.com",
+      "New South Cornell Lead: " + (data.name || "Buyer"),
+      "Name: " + (data.name || "N/A") + "\nPhone: " + (data.phone || "N/A") + "\nEmail: " + (data.email || "N/A") + "\nInterest: " + (data.interest || "N/A") + "\nSource: " + (data.source || "Landing Page")
+    );
+
+    return ContentService.createTextOutput(JSON.stringify({ status: "success" })).setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ status: "error", message: err.toString() })).setMimeType(ContentService.MimeType.JSON);
+  }
+}`;
+
+      const scScriptPre = document.getElementById('sc-script-pre');
+      if (scScriptPre) scScriptPre.textContent = scAppsScriptCode;
+
+      const toggleScScriptBtn = document.getElementById('toggle-sc-script-btn');
+      const scScriptBox = document.getElementById('sc-script-box');
+      if (toggleScScriptBtn && scScriptBox) {
+        toggleScScriptBtn.addEventListener('click', function() {
+          scScriptBox.classList.toggle('hidden');
+        });
+      }
+
+      const copyScScriptBtn = document.getElementById('copy-sc-script-btn');
+      if (copyScScriptBtn) {
+        copyScScriptBtn.addEventListener('click', function() {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(scAppsScriptCode).then(function() {
+              showToast('Apps Script code copied!');
+            });
+          } else {
+            const ta = document.createElement('textarea');
+            ta.value = scAppsScriptCode;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+            showToast('Apps Script code copied!');
+          }
+        });
+      }
+
       const testWebhookBtn = document.getElementById('test-webhook-btn');
       if (testWebhookBtn) {
         testWebhookBtn.addEventListener('click', function() {
-          const url = document.getElementById('input-webhook-url').value.trim() || safeGetStorage('sc_webhook_url', '');
+          const inputEl = document.getElementById('input-webhook-url');
+          const url = (inputEl ? inputEl.value.trim() : '') || safeGetStorage('sc_webhook_url', '');
+          const statusEl = document.getElementById('webhook-status-msg');
           if (!url) {
             showToast('Please paste your Google Apps Script Web App URL first.');
+            if (statusEl) {
+              statusEl.textContent = 'Missing Web App URL: paste your https://script.google.com/macros/s/.../exec URL above first.';
+              statusEl.classList.remove('hidden');
+            }
             return;
           }
+
+          window.vcTrackingConfig.webhookUrl = url;
+          safeSetStorage('sc_webhook_url', url);
+
+          const testLead = {
+            timestamp: new Date().toISOString().slice(0, 16).replace('T', ' '),
+            name: 'Test Lead (South Cornell)',
+            phone: '(647) 385-4792',
+            email: 'eric.wy.hui@outlook.com',
+            interest: 'Lowest Price Units (From $799,900)',
+            is_agent: 'No',
+            call_window: 'Yes - Call Me ASAP',
+            source: 'Admin Test'
+          };
+
+          capturedLeads.unshift(testLead);
+          safeSetStorage('sc_vip_leads', capturedLeads);
+          renderLeadsTable();
+
           fetch(url, {
             method: 'POST',
             mode: 'no-cors',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              timestamp: new Date().toISOString().slice(0, 16).replace('T', ' '),
-              name: 'Test Lead (South Cornell)',
-              phone: '(647) 385-4792',
-              email: 'eric.wy.hui@outlook.com',
-              interest: 'Lowest Price Units (From $799,000)',
-              is_agent: 'No',
-              call_window: 'Yes - Call Me ASAP',
-              source: 'Admin Test'
-            })
+            redirect: 'follow',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify(testLead)
           }).then(function() {
-            showToast('Test lead sent to Google Sheet & email!');
+            showToast('Test lead logged & dispatched to Google Sheet!');
+            if (statusEl) {
+              statusEl.textContent = 'Dispatched to Google Apps Script. If nothing appears in your Sheet, verify you deployed the Apps Script as a Web App with "Who has access: Anyone" and test on your live hosted URL.';
+              statusEl.classList.remove('hidden');
+            }
           }).catch(function() {
-            showToast('Error sending test lead.');
+            showToast('Test lead logged locally; external POST blocked in preview.');
+            if (statusEl) {
+              statusEl.textContent = 'Test lead saved to local tracker, but external POST was blocked in preview mode. Upload the HTML to your live domain to test the Google Sheet sync.';
+              statusEl.classList.remove('hidden');
+            }
           });
         });
       }
